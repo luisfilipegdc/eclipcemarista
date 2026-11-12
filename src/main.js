@@ -4,6 +4,7 @@ import { earthShader, atmosphereShader, moonShader, sunVisibleJS } from './shade
 import { TOURS, orbitLerp } from './tour.js';
 import { Panel } from './panel.js';
 import { PhoneVR } from './phonevr.js';
+import { SunRays, makeStars, Comet, SpaceCow, SoundBoard } from './effects.js';
 
 // ---------------------------------------------------------------------------
 // Escala do "universo"
@@ -164,7 +165,7 @@ const glowMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false,
 });
 const sunGlow = new THREE.Sprite(glowMat);
-sunGlow.scale.setScalar(R_S * 9);
+sunGlow.scale.setScalar(R_S * 7);
 sunGroup.add(sunGlow);
 // a coroa usa ~11% do raio da textura para o disco: escala = 2*R_S/0.22
 const coronaMat = new THREE.SpriteMaterial({
@@ -235,6 +236,13 @@ const moon = new THREE.Mesh(
   new THREE.ShaderMaterial({ uniforms: moonUniforms, ...moonShader })
 );
 space.add(moon);
+// Lua "fantasma": mostra onde a Lua fica no OUTRO tipo de eclipse (parada de comparação)
+const ghostMoon = new THREE.Mesh(
+  new THREE.SphereGeometry(R_M, 48, 24),
+  new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, opacity: 0.35, depthWrite: false })
+);
+ghostMoon.visible = false;
+space.add(ghostMoon);
 
 // órbita da Lua (guia)
 let orbitRing = null;
@@ -255,24 +263,17 @@ function buildOrbitRing(lift) {
 // ---------------------------------------------------------------------------
 // Estrelas
 // ---------------------------------------------------------------------------
-{
-  const N = 6000;
-  const pos = new Float32Array(N * 3);
-  const col = new Float32Array(N * 3);
-  const c = new THREE.Color();
-  for (let i = 0; i < N; i++) {
-    const v = new THREE.Vector3().randomDirection().multiplyScalar(9000);
-    pos.set([v.x, v.y, v.z], i * 3);
-    const b = 0.35 + Math.pow(Math.random(), 3) * 0.9;
-    c.setHSL(0.55 + (Math.random() - 0.5) * 0.25, 0.35 * Math.random(), b * 0.7);
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
-  space.add(stars);
-}
+const stars = makeStars(6000, 9000);
+space.add(stars);
+
+// raios de sol, cometa, vaca astronauta, sons
+const sunRays = new SunRays({ fwd: FWD, up: UP, side: SIDE });
+space.add(sunRays.mesh);
+const comet = new Comet(SUN);
+space.add(comet.group);
+const cow = new SpaceCow();
+const sound = new SoundBoard();
+rig.add(cow.group);
 
 // ---------------------------------------------------------------------------
 // Cones de sombra (umbra e penumbra) — guias visuais
@@ -306,22 +307,23 @@ function placeCone(mesh, origin, axis, len) {
 // ---------------------------------------------------------------------------
 // Rótulos
 // ---------------------------------------------------------------------------
-function makeLabel(text, color) {
+function makeLabel(text, color, small = false) {
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 128;
+  c.width = small ? 1024 : 512; c.height = 128;
   const g = c.getContext('2d');
   g.font = 'bold 64px system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineWidth = 10;
   g.strokeStyle = 'rgba(0,0,0,0.8)';
-  g.strokeText(text, 256, 64);
+  if (small) g.font = 'bold 54px system-ui, sans-serif';
+  g.strokeText(text, c.width / 2, 64);
   g.fillStyle = color;
-  g.fillText(text, 256, 64);
+  g.fillText(text, c.width / 2, 64);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, sizeAttenuation: false, transparent: true }));
-  s.scale.set(0.16, 0.04, 1);
+  s.scale.set(small ? 0.32 : 0.16, 0.04, 1);
   s.renderOrder = 20;
   scene.add(s);
   return s;
@@ -332,6 +334,8 @@ const labels = {
   lua: makeLabel('LUA', '#e6e6e6'),
   umbra: makeLabel('UMBRA', '#ff6b80'),
   penumbra: makeLabel('PENUMBRA', '#ffc070'),
+  luaNova: makeLabel('LUA NOVA = eclipse SOLAR', '#ffd25a', true),
+  luaCheia: makeLabel('LUA CHEIA = eclipse LUNAR', '#ff8a6a', true),
 };
 
 // ---------------------------------------------------------------------------
@@ -449,11 +453,11 @@ panel.layoutButtons([
   { id: 'restart', label: 'Reiniciar', row: 0, col: 2 },
   { id: 'pause', label: (s) => (s.playing ? 'Pausar' : 'Continuar'), row: 0, col: 3 },
   { id: 'next', label: 'Próxima\nparada', row: 0, col: 4 },
-  { id: 'speed', label: (s) => `Velocidade\n${s.speed}x`, row: 1, col: 0 },
-  { id: 'guides', label: 'Cones de\nsombra', row: 1, col: 1 },
-  { id: 'overlay', label: 'Onde é\nvisível', row: 1, col: 2 },
-  { id: 'labels', label: 'Nomes', row: 1, col: 3 },
-  { id: 'narration', label: 'Narração', row: 1, col: 4 },
+  { id: 'guides', label: 'Raios e\nsombras', row: 1, col: 0 },
+  { id: 'overlay', label: 'Onde é\nvisível', row: 1, col: 1 },
+  { id: 'labels', label: 'Nomes', row: 1, col: 2 },
+  { id: 'narration', label: 'Narração', row: 1, col: 3 },
+  { id: 'music', label: 'Música', row: 1, col: 4 },
 ]);
 
 // Tela preta para transições bruscas (troca de modo / pular parada)
@@ -494,6 +498,7 @@ const state = {
   showOverlay: true,
   showLabels: true,
   narration: 'speechSynthesis' in window,
+  music: true,
   stationIdx: -2,
   fade: 0,
 };
@@ -531,6 +536,7 @@ function onButton(id) {
     case 'guides': state.showGuides = !state.showGuides; break;
     case 'overlay': state.showOverlay = !state.showOverlay; break;
     case 'labels': state.showLabels = !state.showLabels; break;
+    case 'music': state.music = !state.music; sound.init(); sound.setMusic(state.music); break;
     case 'narration':
       state.narration = !state.narration;
       if (!state.narration && window.speechSynthesis) speechSynthesis.cancel();
@@ -562,6 +568,8 @@ function speakStation() {
   u.lang = 'pt-BR';
   if (ptVoice) u.voice = ptVoice;
   u.rate = 1.0;
+  u.onstart = () => sound.duck(true);
+  u.onend = u.onerror = () => sound.duck(false);
   speechSynthesis.speak(u);
 }
 
@@ -574,7 +582,9 @@ const ctx = {
 };
 
 function moonPositionAt(t) {
-  const phi = THREE.MathUtils.lerp(-tour.moonSwing, tour.moonSwing, t);
+  // perto do eclipse a Lua anda devagar; na abertura ela dá 2 voltas rápidas em volta da Terra
+  const intro = t < 0.16 ? 1 - THREE.MathUtils.smoothstep(t, 0, 0.16) : 0;
+  const phi = (tour.moonSwing * (t - tour.tMax)) / 0.5 - intro * Math.PI * 4;
   const base = state.mode === 'solar' ? FWD : FWD.clone().negate();
   return base.clone().multiplyScalar(D_M).applyAxisAngle(UP, phi).addScaledVector(UP, tour.moonLift);
 }
@@ -789,6 +799,7 @@ function refreshPanel(force = false) {
       overlay: state.showOverlay,
       labels: state.showLabels,
       narration: state.narration,
+      music: state.music,
     },
   });
 }
@@ -808,7 +819,9 @@ function earthSpinFor(t) {
   const az0 = Math.atan2(x0, z0);
   const targetAz = state.mode === 'solar' ? Math.PI : 0;
   const base = targetAz - az0;
-  return base + (t - 0.5) * (Math.PI / 3);
+  // a Terra gira de verdade: 1 volta a cada 60 s (velocidade 1x)
+  const tRef = state.mode === 'solar' ? 0.41 : 0.74;
+  return base + ((t - tRef) * tour.duration * Math.PI * 2) / 60;
 }
 
 const GAZE_TIME = 1.5;
@@ -816,14 +829,31 @@ const gaze = { id: null, t: 0, locked: null };
 let viewMode = 'intro'; // intro | flat | stereo | xr
 const rotateEl = document.getElementById('rotate');
 
+let cometTimer = 25;
+const _cd = new THREE.Vector3(), _cr = new THREE.Vector3(), _cu = new THREE.Vector3();
+function launchComet() {
+  camera.getWorldPosition(camWorld);
+  camera.getWorldDirection(_cd);
+  _cr.set(1, 0, 0).transformDirection(camera.matrixWorld);
+  _cu.set(0, 1, 0).transformDirection(camera.matrixWorld);
+  comet.launch(camWorld.clone().divideScalar(K), _cd, _cr, _cu);
+}
+
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   if (!renderer.xr.isPresenting) phone.updateHead();
   const portrait = viewMode === 'stereo' && window.innerHeight > window.innerWidth;
   if (rotateEl.hidden === portrait) { rotateEl.hidden = !portrait; if (!portrait) phone.recenter(); }
   if (started && state.playing && !portrait) {
+    const prevT = state.t;
     state.t += (dt * state.speed) / tour.duration;
-    if (state.t >= 1) state.t -= 1;
+    if (state.t >= 1) { state.t -= 1; state.fade = 1; }
+    // easter egg: a vaca astronauta passa uma vez por passeio
+    const cowAt = state.mode === 'solar' ? 0.815 : 0.82;
+    if (prevT < cowAt && state.t >= cowAt) cow.start();
+    // cometa: de tempos em tempos
+    cometTimer -= dt;
+    if (cometTimer <= 0) { launchComet(); cometTimer = 70 + Math.random() * 30; }
   }
   panelTimer -= dt;
   handleGamepads(dt);
@@ -856,7 +886,7 @@ function frame() {
   const visEarth = sunVisibleJS(camBase, SUN, R_S, EARTH, R_E);
   const sunVis = visMoon * visEarth;
   lastSunVis = sunVis;
-  glowMat.opacity = 0.15 + 0.85 * sunVis;
+  glowMat.opacity = 0.1 + 0.7 * sunVis;
   coronaMat.opacity = THREE.MathUtils.clamp((0.06 - sunVis) / 0.06, 0, 1) * (visEarth > 0.5 ? 1 : 0);
   sunLight.intensity = 2.6 * sunVis;
   sunLight.position.copy(camWorld).addScaledVector(FWD, 10);
@@ -879,6 +909,20 @@ function frame() {
   placeCone(umbraCone, occ, ctx.axis, coneInfo.umbraLen);
   placeCone(penumbraCone, occ, ctx.axis, coneInfo.penLen);
 
+  // raios de sol, estrelas, cometa, vaca
+  sunRays.mesh.visible = state.showGuides;
+  sunRays.update(clock.elapsedTime, [{ c: ctx.moon, r: R_M }, { c: EARTH, r: R_E }]);
+  sunRays.material.uniforms.opacity.value = insideCone ? 0.5 : 1;
+  stars.material.uniforms.time.value = clock.elapsedTime;
+  stars.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
+  comet.update(dt);
+  if (cow.update(dt)) sound.moo();
+
+  // comparação: Lua "fantasma" no lugar do outro eclipse
+  const cmp = !!(curSt && curSt.compare);
+  ghostMoon.visible = cmp;
+  if (cmp) ghostMoon.position.copy(state.mode === 'solar' ? FWD : FWD.clone().negate()).multiplyScalar(-D_M).addScaledVector(UP, -tour.moonLift);
+
   // rótulos
   const showL = state.showLabels;
   for (const l of Object.values(labels)) l.visible = showL;
@@ -895,6 +939,14 @@ function frame() {
   }
   labels.umbra.visible = labels.penumbra.visible = showL && state.showGuides && !insideCone;
   labels.sol.visible = showL && sunVis > 0.3;
+  labels.luaNova.visible = labels.luaCheia.visible = cmp;
+  if (cmp) {
+    const realLbl = state.mode === 'solar' ? labels.luaNova : labels.luaCheia;
+    const ghostLbl = state.mode === 'solar' ? labels.luaCheia : labels.luaNova;
+    realLbl.position.copy(ctx.moon).addScaledVector(UP, R_M + 9).multiplyScalar(K);
+    ghostLbl.position.copy(ghostMoon.position).addScaledVector(UP, R_M + 9).multiplyScalar(K);
+    labels.lua.visible = false;
+  }
 
   // cabine
   const blink = Math.floor(clock.elapsedTime * 1.5) % 2 === 0;
@@ -1008,6 +1060,10 @@ async function start(mode) {
   state.narration = $('#narr').checked && 'speechSynthesis' in window;
   if (state.narration) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {} }
   phone.lensOn = $('#lens').checked;
+  state.music = $('#music').checked;
+  sound.musicOn = state.music;
+  sound.init();
+  sound.setMusic(state.music);
   viewMode = mode;
   if (mode === 'stereo') lockLandscape();
   try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
@@ -1042,6 +1098,8 @@ $('#bFull').addEventListener('click', () => {
   } catch (e) { showToast('No iPhone: Compartilhar → Adicionar à Tela de Início.'); }
   showHud();
 });
+$('#bMusic').addEventListener('click', () => { onButton('music'); showHud(); });
+$('#bSpeed').addEventListener('click', () => { onButton('speed'); $('#bSpeed').textContent = 'Velocidade ' + state.speed + 'x'; showHud(); });
 $('#bCenter').addEventListener('click', () => { phone.recenter(); showHud(); });
 $('#bSolar').addEventListener('click', () => { onButton('solar'); showHud(); });
 $('#bLunar').addEventListener('click', () => { onButton('lunar'); showHud(); });
@@ -1086,4 +1144,4 @@ window.addEventListener('resize', () => {
 });
 
 // para testes automatizados
-window.__eclipse = { state, onButton, setMode, ctx, rig, camera, THREE, K, phone, start: (m) => start(m) };
+window.__eclipse = { cow, comet, launchComet, state, onButton, setMode, ctx, rig, camera, THREE, K, phone, start: (m) => start(m) };

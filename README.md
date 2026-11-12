@@ -39,6 +39,16 @@ Mesma tela dividida do app *Viagem à Lua*:
 As sombras são calculadas fisicamente (quanto do disco do Sol está coberto em cada ponto),
 então umbra, penumbra e a cor da Lua mudam de forma contínua enquanto a Lua anda na órbita.
 
+## Extras
+
+- **Raios de sol** animados (linhas amarelas): param ao bater na Lua ou na Terra, mostrando como se forma a sombra.
+- A **Terra gira** no próprio eixo inclinado (1 volta por minuto) e, na abertura, a **Lua dá voltas** em volta da Terra antes de parar na posição do eclipse.
+- Parada final compara **onde a Lua fica** em cada eclipse (Lua Nova × Lua Cheia), com uma Lua transparente no outro lugar.
+- Estrelas mais suaves, **cintilando**; um **cometa** passa de vez em quando.
+- *Easter egg*: uma **vaca astronauta** de capacete passa pela janela fazendo “Muuu!”.
+- **Música de fundo** original (órgão suave, gerada no próprio navegador), que abaixa durante a narração.
+  Para usar outra música, coloque um arquivo `assets/musica.mp3` (a escola precisa ter o direito de uso da faixa).
+
 ## Controles
 
 | Onde | Como |
