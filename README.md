@@ -1,10 +1,23 @@
 # Eclipse VR — Missão Satélite
 
-Experiência em realidade virtual (WebXR) para óculos **Meta Quest** em que o aluno
+Experiência em realidade virtual para óculos de **celular** (Opus VR / Shinecon — tela dividida)
+e também para óculos **WebXR** (Meta Quest), em que o aluno
 fica dentro de um **satélite em órbita** e vê de perto um **eclipse solar** e um
 **eclipse lunar** acontecendo.
 
-Roda direto no navegador do Quest (sem instalar nada) e também no computador.
+Roda direto no navegador (sem instalar nada): celular no óculos, Quest ou computador.
+
+## Óculos de celular (Opus VR)
+
+Mesma tela dividida do app *Viagem à Lua*:
+- celular **deitado**, tela dividida em duas metades (uma para cada olho), com **correção das lentes**;
+- **distância entre as lentes** ajustável de 50 a 72 mm (padrão 62 mm), salva no celular;
+  durante a missão, botões **Olhos −** e **Olhos +** (aparece uma mira amarela para alinhar);
+- **giroscópio** para olhar em volta (sem giroscópio, arrastar o dedo);
+- aviso “Deite o celular” quando está em pé; tela cheia e tela sempre acesa;
+- para apertar os botões do painel do satélite: **olhar para o botão por 1,5 s** (a mira enche);
+- tocar na tela mostra os botões do professor (Olhos −/+, Tela cheia, Centralizar, Eclipse solar,
+  Eclipse lunar, Próxima parada, Pausar, Sair).
 
 ## O que o aluno vê
 
@@ -30,6 +43,7 @@ então umbra, penumbra e a cor da Lua mudam de forma contínua enquanto a Lua an
 
 | Onde | Como |
 |---|---|
+| Celular no óculos | Olhe para um botão do painel por 1,5 s. Toque na tela para os botões do professor. |
 | Quest | Aponte o controle para o painel e aperte o **gatilho**. **Joystick**: girar 30°. **A/X**: próxima parada. **B/Y**: pausar. |
 | Computador | Arraste o mouse para olhar; clique nos botões. Teclas **1** (solar), **2** (lunar), **Espaço** (pausar), **N** (próxima parada). |
 
@@ -41,8 +55,8 @@ Velocidade (0,5x a 4x), Cones de sombra, Onde é visível, Nomes, Narração (vo
 O WebXR exige **HTTPS**. O jeito mais fácil é o GitHub Pages:
 
 1. No GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, escolha a branch e a pasta `/ (root)`.
-2. Abra o endereço gerado (`https://<usuario>.github.io/eclipcemarista/`) no navegador do Quest.
-3. Toque em **ENTER VR**.
+2. Abra o endereço gerado (`https://<usuario>.github.io/eclipcemarista/`) no Chrome/Safari do celular
+   e toque em **Com óculos VR** — ou, no Quest, toque em **ENTER VR**.
 
 Para testar no computador:
 
@@ -60,6 +74,7 @@ O app não depende de internet externa: o three.js está em `vendor/` e as textu
 - `src/main.js` — cena, satélite, controles, painel e lógica do passeio.
 - `src/tour.js` — roteiro e textos de cada parada (fácil de editar).
 - `src/shaders.js` — sombreamento da Terra, atmosfera e Lua (cálculo de umbra/penumbra).
+- `src/phonevr.js` — tela dividida, correção das lentes, distância entre lentes e giroscópio.
 - `src/panel.js` — painel de controle desenhado em canvas.
 - `assets/` — texturas geradas por `tools/gerar_texturas.py` (contornos dos continentes do pacote `global-land-mask`).
 - `vendor/` — three.js r169 (licença MIT, em `vendor/THREE_LICENSE`).

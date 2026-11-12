@@ -2,31 +2,62 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0f26" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Eclipse VR — Missão Satélite</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
-    canvas { display: block; }
-    #intro {
-      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(ellipse at center, rgba(10,20,50,.92), rgba(0,0,0,.97));
-      color: #e8eefc; z-index: 10; text-align: center; padding: 24px; box-sizing: border-box;
+    :root {
+      --night: #0a0f26; --deep: #141b3f; --ink: #eef1ff; --muted: #aab2d9;
+      --sun: #ffcf5a; --line: rgba(238, 241, 255, .16);
+      color-scheme: dark;
     }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--ink);
+      font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; touch-action: none; }
+
+    #intro { position: fixed; inset: 0; z-index: 20; overflow-y: auto; display: grid; place-items: center;
+      padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+      background: radial-gradient(ellipse at 50% 120%, #24306b 0%, var(--night) 60%); }
     #intro.hidden { display: none; }
-    #intro .card { max-width: 720px; }
-    #intro h1 { font-size: clamp(28px, 5vw, 52px); margin: 0 0 8px; letter-spacing: .5px; }
-    #intro h1 span { color: #ffcf5a; }
-    #intro p { font-size: clamp(15px, 2.2vw, 19px); line-height: 1.5; color: #b9c6e6; margin: 10px 0; }
-    #intro ul { text-align: left; display: inline-block; color: #b9c6e6; font-size: 16px; line-height: 1.6; }
-    #intro button.start {
-      margin-top: 18px; padding: 14px 28px; font-size: 18px; border-radius: 10px; border: 0;
-      background: #ffcf5a; color: #1a1300; font-weight: 700; cursor: pointer;
-    }
-    #loading { margin-top: 12px; font-size: 14px; color: #7f8db3; }
-    #hint {
-      position: fixed; left: 12px; bottom: 12px; color: #8fa0c8; font-size: 13px; z-index: 5;
-      background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 6px; pointer-events: none;
-    }
+    .card { width: 100%; max-width: 560px; display: grid; gap: 20px; }
+    .eyebrow { font-weight: 800; font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin: 0; }
+    h1 { font-size: clamp(2.2rem, 8vw, 3.4rem); line-height: 1; margin: 6px 0 0; }
+    h1 span { color: var(--sun); }
+    .lede { margin: 10px 0 0; color: var(--muted); font-size: 1.02rem; line-height: 1.5; }
+    .go { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .go button { font: 800 1.08rem/1.1 system-ui, sans-serif; padding: 16px 14px; border-radius: 16px; border: 2px solid transparent; cursor: pointer; min-height: 64px; }
+    .go .vr { background: var(--sun); color: #1b1630; }
+    .go .flat { background: transparent; color: var(--ink); border-color: var(--line); }
+    .go small { display: block; font: 700 .74rem system-ui, sans-serif; opacity: .75; margin-top: 4px; }
+    .opts { display: grid; gap: 10px; }
+    .toggle { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--muted); }
+    .toggle input { width: 20px; height: 20px; accent-color: var(--sun); }
+    .ipd { display: grid; gap: 6px; color: var(--muted); font-weight: 700; }
+    .ipd b { color: var(--sun); }
+    .ipd input { width: 100%; accent-color: var(--sun); }
+    .ipd small { font-weight: 400; line-height: 1.4; }
+    .steps { margin: 0; padding: 16px 18px 16px 38px; border: 1px solid var(--line); border-radius: 16px; background: rgba(20, 27, 63, .55); display: grid; gap: 8px; line-height: 1.45; }
+    .steps li::marker { color: var(--sun); font-weight: 800; }
+    .note { font-size: .82rem; color: var(--muted); margin: 0; line-height: 1.45; }
+    #loading { font-size: .8rem; color: #7f8db3; }
+
+    .hud { position: fixed; z-index: 10; top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); left: calc(8px + env(safe-area-inset-left, 0px));
+      display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; transition: opacity .3s; }
+    .hud.off { opacity: 0; pointer-events: none; }
+    .hud button { font: 700 .82rem system-ui, sans-serif; color: var(--ink); background: rgba(10, 15, 38, .72); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; cursor: pointer; }
+    #toast { position: fixed; z-index: 11; left: 50%; transform: translateX(-50%); top: calc(56px + env(safe-area-inset-top, 0px));
+      background: var(--sun); color: #1b1630; font-weight: 800; padding: 9px 14px; border-radius: 12px; max-width: calc(100% - 32px); text-align: center; }
+    #rotate { position: fixed; inset: 0; z-index: 30; background: var(--night); display: grid; place-content: center; justify-items: center; gap: 18px; text-align: center; }
+    #rotate[hidden] { display: none; }
+    #rotate .phone { width: 56px; height: 96px; border: 5px solid var(--sun); border-radius: 12px; animation: turn 2.2s ease-in-out infinite; }
+    #rotate p { font: 800 1.5rem/1.2 system-ui, sans-serif; margin: 0; max-width: 16ch; }
+    @keyframes turn { 0%, 20% { transform: rotate(0); } 55%, 100% { transform: rotate(-90deg); } }
+    @media (max-width: 420px) { .go { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { #rotate .phone { animation: none; transform: rotate(-90deg); } }
   </style>
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.min.js" } }
@@ -35,20 +66,51 @@
 <body>
   <div id="intro">
     <div class="card">
-      <h1>Eclipse <span>VR</span> — Missão Satélite</h1>
-      <p>Você está a bordo de um satélite em órbita da Terra. Daqui de cima você vai ver
-         de perto como acontecem o <b>eclipse solar</b> e o <b>eclipse lunar</b> — e descobrir
-         por que só uma parte do planeta consegue ver cada um deles.</p>
-      <ul>
-        <li><b>Óculos VR (Meta Quest):</b> toque em “ENTER VR”. Use o gatilho para apertar os botões do painel e o joystick para girar.</li>
-        <li><b>Computador:</b> arraste o mouse para olhar ao redor e clique nos botões do painel.</li>
-        <li>Teclas: <b>1</b> eclipse solar · <b>2</b> eclipse lunar · <b>Espaço</b> pausar · <b>N</b> próxima parada</li>
-      </ul>
-      <div><button class="start" id="startBtn">Começar no navegador</button></div>
+      <div>
+        <p class="eyebrow">Missão Satélite</p>
+        <h1>Eclipse <span>VR</span></h1>
+        <p class="lede">O aluno fica dentro de um satélite em órbita e vê de perto um <b>eclipse solar</b> e um
+          <b>eclipse lunar</b> — e descobre por que só uma parte do planeta consegue ver cada um deles.</p>
+      </div>
+      <div class="go">
+        <button class="vr" id="btnVR">Com óculos VR<small>tela dividida para o Opus VR</small></button>
+        <button class="flat" id="btnFlat">Só na tela<small>para testar ou projetar</small></button>
+      </div>
+      <div class="opts">
+        <label class="toggle"><input type="checkbox" id="narr" checked> Narração em voz</label>
+        <label class="toggle"><input type="checkbox" id="lens" checked> Correção das lentes do óculos</label>
+        <div class="ipd">
+          <label for="ipd">Distância entre as lentes: <b id="ipdVal">62 mm</b></label>
+          <input type="range" id="ipd" min="50" max="72" step="1" value="62">
+          <small>Imagem duplicada? Meça de centro a centro das lentes do óculos com uma régua e coloque aqui. Também dá para ajustar durante a viagem com os botões Olhos − e Olhos +.</small>
+        </div>
+      </div>
+      <ol class="steps">
+        <li>Volume do celular no máximo e brilho alto.</li>
+        <li>Toque em <b>Com óculos VR</b> e vire o celular deitado.</li>
+        <li>Encaixe no óculos com o meio da tela alinhado ao divisor.</li>
+        <li>Para apertar um botão do painel do satélite, <b>olhe para ele</b> por um segundo e meio (a mira enche).</li>
+      </ol>
+      <p class="note">O giroscópio só funciona com a página aberta direto no navegador do celular (Chrome ou Safari, em link https). Sem giroscópio, dá para olhar em volta arrastando o dedo. Tocar na tela durante a viagem mostra os botões do professor. No computador: arraste para olhar, clique no painel; teclas 1, 2, Espaço e N.</p>
+      <p class="note" id="questNote" hidden>Óculos com WebXR detectado (ex.: Meta Quest): use o botão <b>ENTER VR</b> embaixo da tela.</p>
       <div id="loading">Carregando…</div>
     </div>
   </div>
-  <div id="hint">Arraste para olhar · clique no painel do satélite</div>
+
+  <div class="hud off" id="hud">
+    <button id="bIpdM">Olhos −</button>
+    <button id="bIpdP">Olhos +</button>
+    <button id="bFull">Tela cheia</button>
+    <button id="bCenter">Centralizar</button>
+    <button id="bSolar">Eclipse solar</button>
+    <button id="bLunar">Eclipse lunar</button>
+    <button id="bNext">Próxima parada</button>
+    <button id="bPause">Pausar</button>
+    <button id="bExit">Sair</button>
+  </div>
+  <div id="toast" hidden></div>
+  <div id="rotate" hidden><div class="phone" aria-hidden="true"></div><p>Deite o celular para começar a missão</p></div>
+
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ import { VRButton } from '../vendor/VRButton.js';
 import { earthShader, atmosphereShader, moonShader, sunVisibleJS } from './shaders.js';
 import { TOURS, orbitLerp } from './tour.js';
 import { Panel } from './panel.js';
+import { PhoneVR } from './phonevr.js';
 
 // ---------------------------------------------------------------------------
 // Escala do "universo"
@@ -35,20 +36,32 @@ renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 document.body.appendChild(renderer.domElement);
 
-const vrButton = VRButton.createButton(renderer);
-document.body.appendChild(vrButton);
+// Botão "ENTER VR" só aparece em óculos com WebXR (ex.: Meta Quest)
+if (navigator.xr && navigator.xr.isSessionSupported) {
+  navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
+    if (!ok) return;
+    const b = VRButton.createButton(renderer);
+    document.body.appendChild(b);
+    document.getElementById('questNote').hidden = false;
+  }).catch(() => {});
+}
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 400000);
-camera.position.set(0, 1.6, 0.7); // no VR a posição vem do óculos
 
 // rig = o satélite (se move pelo espaço); turn = giro do jogador (joystick)
 const rig = new THREE.Group();
 const turn = new THREE.Group();
 rig.add(turn);
-turn.add(camera);
+// head = cabeça do aluno (giroscópio / mouse). No WebXR o óculos controla a câmera.
+const head = new THREE.Group();
+const HEAD_POS = new THREE.Vector3(0, 1.6, 0.6);
+head.position.copy(HEAD_POS);
+turn.add(head);
+head.add(camera);
+const phone = new PhoneVR(renderer, head);
 scene.add(rig);
 
 const space = new THREE.Group();
@@ -449,7 +462,25 @@ const fader = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false })
 );
 fader.renderOrder = 999;
-camera.add(fader);
+head.add(fader);
+
+// Mira para escolher botões olhando (modo óculos de celular)
+const reticle = new THREE.Group();
+reticle.position.set(0, 0, -1);
+const retBase = new THREE.Mesh(new THREE.RingGeometry(0.009, 0.013, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }));
+const retFill = new THREE.Mesh(new THREE.RingGeometry(0.014, 0.021, 32, 1, Math.PI / 2, 0.001), new THREE.MeshBasicMaterial({ color: 0xffcf5a, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+retBase.renderOrder = retFill.renderOrder = 1000;
+reticle.add(retBase, retFill);
+reticle.visible = false;
+head.add(reticle);
+let retShown = -1;
+function setReticleProgress(p) {
+  const q = Math.round(p * 40) / 40;
+  if (q === retShown) return;
+  retShown = q;
+  retFill.geometry.dispose();
+  retFill.geometry = new THREE.RingGeometry(0.014, 0.021, 32, 1, Math.PI / 2, -Math.max(0.001, q * Math.PI * 2));
+}
 
 // ---------------------------------------------------------------------------
 // Estado
@@ -664,12 +695,12 @@ function rayFromController(c) {
   raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmpM);
 }
 
-const mouse = { down: false, moved: 0, x: 0, y: 0, yaw: 0, pitch: 0 };
+const mouse = { down: false, moved: 0, x: 0, y: 0 };
 renderer.domElement.addEventListener('pointerdown', (e) => {
   mouse.down = true; mouse.moved = 0; mouse.x = e.clientX; mouse.y = e.clientY;
 });
 window.addEventListener('pointerup', (e) => {
-  if (mouse.down && mouse.moved < 6) desktopClick(e);
+  if (mouse.down && mouse.moved < 6) screenTap(e);
   mouse.down = false;
 });
 window.addEventListener('pointermove', (e) => {
@@ -677,11 +708,9 @@ window.addEventListener('pointermove', (e) => {
   if (mouse.down) {
     const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y;
     mouse.moved += Math.abs(dx) + Math.abs(dy);
-    mouse.yaw -= dx * 0.004;
-    mouse.pitch = THREE.MathUtils.clamp(mouse.pitch - dy * 0.004, -1.4, 1.4);
+    phone.drag(dx, dy);
     mouse.x = e.clientX; mouse.y = e.clientY;
-    camera.rotation.set(mouse.pitch, mouse.yaw, 0, 'YXZ');
-  } else {
+  } else if (viewMode === 'flat') {
     const hit = pickPanel(e);
     panel.setHover(hit);
     renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
@@ -693,10 +722,11 @@ function pickPanel(e) {
   const hit = raycaster.intersectObject(panel.mesh)[0];
   return hit ? panel.hitTest(hit.uv) : null;
 }
-function desktopClick(e) {
-  if (renderer.xr.isPresenting) return;
-  const b = pickPanel(e);
+function screenTap(e) {
+  if (renderer.xr.isPresenting || viewMode === 'intro') return;
+  const b = viewMode === 'flat' ? pickPanel(e) : null;
   if (b) onButton(b.id);
+  else showHud();
 }
 window.addEventListener('keydown', (e) => {
   if (e.key === '1') onButton('solar');
@@ -781,9 +811,17 @@ function earthSpinFor(t) {
   return base + (t - 0.5) * (Math.PI / 3);
 }
 
+const GAZE_TIME = 1.5;
+const gaze = { id: null, t: 0, locked: null };
+let viewMode = 'intro'; // intro | flat | stereo | xr
+const rotateEl = document.getElementById('rotate');
+
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  if (started && state.playing) {
+  if (!renderer.xr.isPresenting) phone.updateHead();
+  const portrait = viewMode === 'stereo' && window.innerHeight > window.innerWidth;
+  if (rotateEl.hidden === portrait) { rotateEl.hidden = !portrait; if (!portrait) phone.recenter(); }
+  if (started && state.playing && !portrait) {
     state.t += (dt * state.speed) / tour.duration;
     if (state.t >= 1) state.t -= 1;
   }
@@ -878,6 +916,25 @@ function frame() {
     panel.setHover(anyHover);
   }
 
+  // modo óculos de celular: escolher botão olhando para ele por 1,5 s
+  if (viewMode === 'stereo') {
+    head.updateMatrixWorld(true);
+    raycaster.ray.origin.setFromMatrixPosition(head.matrixWorld);
+    raycaster.ray.direction.set(0, 0, -1).transformDirection(head.matrixWorld);
+    const hit = raycaster.intersectObject(panel.mesh)[0];
+    const btn = hit ? panel.hitTest(hit.uv) : null;
+    panel.setHover(btn);
+    const id = btn ? btn.id : null;
+    if (id !== gaze.id) { gaze.id = id; gaze.t = 0; }
+    if (id && id !== gaze.locked) {
+      gaze.t += dt;
+      if (gaze.t >= GAZE_TIME) { gaze.locked = id; gaze.t = 0; onButton(id); }
+    }
+    if (!id) gaze.locked = null;
+    setReticleProgress(id && id !== gaze.locked ? gaze.t / GAZE_TIME : 0);
+    retBase.material.color.set(id ? 0xffcf5a : 0xffffff);
+  }
+
   // narração ao chegar numa parada
   if (pose.idx !== state.stationIdx) {
     const changedToStation = pose.idx >= 0;
@@ -891,7 +948,13 @@ function frame() {
   fader.material.opacity = state.fade;
   fader.visible = state.fade > 0.001;
 
-  renderer.render(scene, camera);
+  if (renderer.xr.isPresenting) renderer.render(scene, camera);
+  else if (viewMode === 'stereo') phone.render(scene);
+  else {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -901,27 +964,126 @@ setMode('solar');
 state.fade = 0;
 renderer.setAnimationLoop(frame);
 
-const intro = document.getElementById('intro');
-document.getElementById('startBtn').addEventListener('click', () => {
+const $ = (q) => document.querySelector(q);
+const intro = $('#intro');
+const hud = $('#hud');
+const toast = $('#toast');
+let hudTimer = 0, toastTimer = 0;
+function showHud() {
+  if (viewMode === 'intro' || viewMode === 'xr') return;
+  hud.classList.remove('off');
+  clearTimeout(hudTimer);
+  if (viewMode === 'stereo') hudTimer = setTimeout(() => hud.classList.add('off'), 3500);
+}
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toast.hidden = true), 4000);
+}
+function setIpdUI(v, show) {
+  const mm = phone.setIpd(v);
+  $('#ipd').value = mm;
+  $('#ipdVal').textContent = mm + ' mm';
+  if (show) { phone.showGuide(); showToast('Lentes: ' + mm + ' mm'); }
+}
+setIpdUI(phone.ipdMm, false);
+$('#ipd').addEventListener('input', (e) => setIpdUI(+e.target.value, false));
+state.narration = state.narration && $('#narr').checked;
+
+function lockLandscape() {
+  const el = document.documentElement;
+  try {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const p = req && req.call(el);
+    if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => {});
+  } catch (e) {}
+}
+
+async function start(mode) {
+  let permP = null;
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { permP = DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  }
+  state.narration = $('#narr').checked && 'speechSynthesis' in window;
+  if (state.narration) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {} }
+  phone.lensOn = $('#lens').checked;
+  viewMode = mode;
+  if (mode === 'stereo') lockLandscape();
+  try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
+  if (permP) try { await permP; } catch (e) {}
   intro.classList.add('hidden');
+  hud.classList.toggle('off', mode === 'stereo');
+  reticle.visible = mode === 'stereo';
+  // no óculos de celular o aluno fica mais perto do painel (texto maior)
+  head.position.set(0, 1.6, mode === 'stereo' ? 0.15 : 0.6);
+  phone.recenter();
+  if (mode === 'stereo') phone.showGuide(5000);
   started = true;
+  state.fade = 1;
+  refreshPanel(true);
   speakStation();
+  setTimeout(() => { if (!phone.gyro && mode === 'stereo') showToast('Sem giroscópio aqui. Arraste o dedo para olhar em volta.'); }, 1800);
+}
+$('#btnVR').addEventListener('click', () => start('stereo'));
+$('#btnFlat').addEventListener('click', () => start('flat'));
+$('#bIpdM').addEventListener('click', () => { setIpdUI(phone.ipdMm - 1, true); showHud(); });
+$('#bIpdP').addEventListener('click', () => { setIpdUI(phone.ipdMm + 1, true); showHud(); });
+$('#bFull').addEventListener('click', () => {
+  const on = document.fullscreenElement || document.webkitFullscreenElement;
+  try {
+    if (on) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else {
+      const de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen;
+      if (!req) throw 0;
+      const p = req.call(de);
+      if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => showToast('No iPhone: Compartilhar → Adicionar à Tela de Início.'));
+    }
+  } catch (e) { showToast('No iPhone: Compartilhar → Adicionar à Tela de Início.'); }
+  showHud();
 });
+$('#bCenter').addEventListener('click', () => { phone.recenter(); showHud(); });
+$('#bSolar').addEventListener('click', () => { onButton('solar'); showHud(); });
+$('#bLunar').addEventListener('click', () => { onButton('lunar'); showHud(); });
+$('#bNext').addEventListener('click', () => { onButton('next'); showHud(); });
+$('#bPause').addEventListener('click', () => { onButton('pause'); $('#bPause').textContent = state.playing ? 'Pausar' : 'Continuar'; showHud(); });
+$('#bExit').addEventListener('click', () => {
+  started = false;
+  viewMode = 'intro';
+  reticle.visible = false;
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  try { document.fullscreenElement && document.exitFullscreen(); } catch (e) {}
+  intro.classList.remove('hidden');
+  rotateEl.hidden = true;
+  hud.classList.add('off');
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && started && state.playing) {
+    state.playing = false;
+    $('#bPause').textContent = 'Continuar';
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    refreshPanel(true);
+  }
+});
+
 renderer.xr.addEventListener('sessionstart', () => {
   intro.classList.add('hidden');
-  document.getElementById('hint').style.display = 'none';
-  camera.rotation.set(0, 0, 0);
+  hud.classList.add('off');
+  viewMode = 'xr';
+  reticle.visible = false;
+  head.position.set(0, 0, 0);
+  head.quaternion.identity();
   started = true;
   speakStation();
 });
 renderer.xr.addEventListener('sessionend', () => {
-  document.getElementById('hint').style.display = '';
+  head.position.copy(HEAD_POS);
+  viewMode = 'flat';
+  hud.classList.remove('off');
 });
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // para testes automatizados
-window.__eclipse = { state, onButton, setMode, ctx, rig, camera, THREE, K };
+window.__eclipse = { state, onButton, setMode, ctx, rig, camera, THREE, K, phone, start: (m) => start(m) };
