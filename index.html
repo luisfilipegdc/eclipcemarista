@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Eclipse VR — Missão Satélite</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; }
+    #intro {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(10,20,50,.92), rgba(0,0,0,.97));
+      color: #e8eefc; z-index: 10; text-align: center; padding: 24px; box-sizing: border-box;
+    }
+    #intro.hidden { display: none; }
+    #intro .card { max-width: 720px; }
+    #intro h1 { font-size: clamp(28px, 5vw, 52px); margin: 0 0 8px; letter-spacing: .5px; }
+    #intro h1 span { color: #ffcf5a; }
+    #intro p { font-size: clamp(15px, 2.2vw, 19px); line-height: 1.5; color: #b9c6e6; margin: 10px 0; }
+    #intro ul { text-align: left; display: inline-block; color: #b9c6e6; font-size: 16px; line-height: 1.6; }
+    #intro button.start {
+      margin-top: 18px; padding: 14px 28px; font-size: 18px; border-radius: 10px; border: 0;
+      background: #ffcf5a; color: #1a1300; font-weight: 700; cursor: pointer;
+    }
+    #loading { margin-top: 12px; font-size: 14px; color: #7f8db3; }
+    #hint {
+      position: fixed; left: 12px; bottom: 12px; color: #8fa0c8; font-size: 13px; z-index: 5;
+      background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 6px; pointer-events: none;
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div id="intro">
+    <div class="card">
+      <h1>Eclipse <span>VR</span> — Missão Satélite</h1>
+      <p>Você está a bordo de um satélite em órbita da Terra. Daqui de cima você vai ver
+         de perto como acontecem o <b>eclipse solar</b> e o <b>eclipse lunar</b> — e descobrir
+         por que só uma parte do planeta consegue ver cada um deles.</p>
+      <ul>
+        <li><b>Óculos VR (Meta Quest):</b> toque em “ENTER VR”. Use o gatilho para apertar os botões do painel e o joystick para girar.</li>
+        <li><b>Computador:</b> arraste o mouse para olhar ao redor e clique nos botões do painel.</li>
+        <li>Teclas: <b>1</b> eclipse solar · <b>2</b> eclipse lunar · <b>Espaço</b> pausar · <b>N</b> próxima parada</li>
+      </ul>
+      <div><button class="start" id="startBtn">Começar no navegador</button></div>
+      <div id="loading">Carregando…</div>
+    </div>
+  </div>
+  <div id="hint">Arraste para olhar · clique no painel do satélite</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
